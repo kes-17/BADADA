@@ -1,65 +1,47 @@
-import streamlit as st
-import pandas as pd
 import requests
-import plotly.express as px
+import pandas as pd
+import datetime
 
-# 페이지 설정 (바다 테마)
-st.set_page_config(page_title="🌊 전국 해수욕장 수질 현황", layout="wide")
-
-st.markdown("""
-    <style>
-    .main { background-color: #eef9ff; }
-    h1 { color: #0077be; text-align: center; }
-    </style>
-    """, unsafe_allow_html=True)
-
-st.title("🌊 전국 해수욕장 수질 적합성 대시보드 🐬")
-
-# 사이드바 설정
-st.sidebar.header("🐬 데이터 조회 설정")
-api_key = st.sidebar.text_input("API 인증키 입력", type="password")
-sido_nm = st.sidebar.selectbox("시도 선택", ["강원도", "충남", "부산광역시", "제주특별자치도", "경상북도"])
-res_year = st.sidebar.text_input("조사년도", "2025")
-
-# 데이터 불러오기 함수
-def get_data(key, sido, year):
+def get_latest_seawater_data(api_key, sido):
+    # 현재 연도부터 과거 5년까지 탐색
+    current_year = datetime.datetime.now().year
+    
     url = "https://apis.data.go.kr/1192000/service/OceansBeachSeawaterService1/getOceansBeachSeawaterInfo1"
-    params = {
-        'ServiceKey': key,
-        'pageNo': '1',
-        'numOfRows': '100',
-        'resultType': 'json',
-        'SIDO_NM': sido,
-        'RES_YEAR': year
-    }
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        data = response.json()
-        items = data['response']['body']['items']['item']
-        return pd.DataFrame(items)
-    return pd.DataFrame()
-
-# 메인 로직
-if api_key:
-    if st.sidebar.button("📊 데이터 분석 시작"):
-        with st.spinner('데이터를 불러오는 중...'):
-            df = get_data(api_key, sido_nm, res_year)
+    
+    for year in range(current_year, current_year - 5, -1):
+        params = {
+            'ServiceKey': api_key,
+            'pageNo': '1',
+            'numOfRows': '10',
+            'resultType': 'json',
+            'SIDO_NM': sido,
+            'RES_YEAR': str(year)
+        }
+        
+        try:
+            response = requests.get(url, params=params)
+            data = response.json()
             
-            if not df.empty:
-                # 지도 시각화용 데이터 전처리 (API 응답 필드명에 맞게 조정 필요)
-                # 예시: 'lat', 'lon' 필드가 있다면 그대로 사용
-                st.subheader(f"📍 {sido_nm} 해수욕장 지도 시각화")
-                st.map(df)
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.subheader("수질 적합성 분포 🐟")
-                    fig = px.pie(df, names='적합여부', hole=0.3)
-                    st.plotly_chart(fig, use_container_width=True)
-                with col2:
-                    st.subheader("지역별 상세 데이터 🏖️")
-                    st.dataframe(df)
+            # 응답 데이터가 존재하는지 확인
+            if 'response' in data and 'body' in data['response'] and data['response']['body']['totalCount'] > 0:
+                print(f"성공: {year}년 데이터를 찾았습니다.")
+                items = data['response']['body']['items']['item']
+                return pd.DataFrame(items), str(year)
             else:
-                st.error("데이터가 없습니다. 인증키나 파라미터를 확인하세요.")
+                print(f"알림: {year}년 데이터는 아직 준비되지 않았습니다.")
+        except Exception as e:
+            print(f"오류: {year}년 데이터 조회 중 문제 발생 - {e}")
+            
+    return pd.DataFrame(), None
+
+# 사용 예시
+api_key = "a15b376187c0d83fcdb32b2bebebd20dc1bddd655f7268f142003f6c6da3859c"
+sido = "강원도"
+
+df, found_year = get_latest_seawater_data(api_key, sido)
+
+if not df.empty:
+    print(f"\n조회된 {found_year}년 데이터 미리보기:")
+    print(df[['해수욕장명', '적합여부']].head())
 else:
-    st.info("사이드바에 API 인증키를 입력하고 조회 버튼을 누르세요.")
+    print("데이터를 찾을 수 없습니다.")
