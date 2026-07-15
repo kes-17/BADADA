@@ -25,31 +25,27 @@ st.markdown("### 🏖️ 가고 싶은 해수욕장의 수질을 확인해보세
 df = load_data()
 api_key = st.sidebar.text_input("공공데이터 API 키", type="password")
 
-# 2. 파라미터를 추가하여 데이터 호출 (수정됨)
+# 2. 데이터 병합 오류 방지 코드 (수정됨)
 if api_key:
-    # 포털 상세 정보에 명시된 End Point 및 파라미터 적용
     url = "https://apis.data.go.kr/1192000/service/OceansBeachSeawaterService1/getOceansBeachSeawaterInfo1"
-    params = {
-        "serviceKey": api_key,
-        "numOfRows": "300",
-        "pageNo": "1",
-        "resultType": "json",
-        "RES_YEAR": "2026"  # 필수 파라미터: 현재 연도 기준으로 최신 데이터 요청
-    }
+    params = {"serviceKey": api_key, "numOfRows": "300", "pageNo": "1", "resultType": "json", "RES_YEAR": "2026"}
+    
     try:
         response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            # 응답 데이터 구조에 맞게 데이터 추출
-            if 'getOceansBeachSeawaterInfo' in data and 'item' in data['getOceansBeachSeawaterInfo']:
+            if 'getOceansBeachSeawaterInfo' in data:
                 items = data['getOceansBeachSeawaterInfo']['item']
                 df_api = pd.DataFrame(items)
-                df = pd.merge(df, df_api, on='해수욕장명', how='left')
-                st.sidebar.success("데이터 로드 완료!")
-            else:
-                st.sidebar.warning("조회된 데이터가 없습니다. 파라미터(시도명 등)를 확인하세요.")
+                
+                # 핵심 수정: '해수욕장명' 컬럼이 API에 있는지 확인 후 병합
+                if '해수욕장명' in df_api.columns:
+                    df = pd.merge(df, df_api, on='해수욕장명', how='left')
+                    st.sidebar.success("데이터 로드 완료!")
+                else:
+                    st.sidebar.error("API 데이터에 '해수욕장명' 항목이 없습니다. (API 응답 확인 필요)")
     except Exception as e:
-        st.sidebar.error(f"오류: {e}")
+        st.sidebar.error(f"연결 오류: {e}")
 
 # 3. 지도 및 선택 (수정 없음)
 selected_beach = st.selectbox("확인하고 싶은 해수욕장을 선택하세요:", df['해수욕장명'].unique())
@@ -67,7 +63,7 @@ with col2:
     
     # 수질 데이터 출력
     target_col = next((c for c in df.columns if '적합' in c or '수질' in c), None)
-    if target_col and pd.notnull(beach_data[target_col]):
+    if target_col and target_col in beach_data and pd.notnull(beach_data[target_col]):
         st.markdown(f"### 수질 상태: {beach_data[target_col]}")
     else:
         st.warning("선택한 해수욕장의 수질 정보를 찾을 수 없습니다.")
