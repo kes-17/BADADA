@@ -1,54 +1,65 @@
 import streamlit as st
 import pandas as pd
+import requests
 import plotly.express as px
 
-# 1. 페이지 설정
+# 페이지 설정 (바다 테마)
 st.set_page_config(page_title="🌊 전국 해수욕장 수질 현황", layout="wide")
 
 st.markdown("""
     <style>
-    .main { background-color: #f0f8ff; }
+    .main { background-color: #eef9ff; }
     h1 { color: #0077be; text-align: center; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🌊 전국 해수욕장 수질 적합성 대시보드 🏖️")
+st.title("🌊 전국 해수욕장 수질 적합성 대시보드 🐬")
 
-# 2. 데이터 로드 (업로드한 CSV 파일 활용)
-@st.cache_data
-def load_data():
-    # 파일 인코딩 확인 후 로드
-    df = pd.read_csv('해수욕장_환경정보_공간.csv', encoding='utf-8')
-    return df
+# 사이드바 설정
+st.sidebar.header("🐬 데이터 조회 설정")
+api_key = st.sidebar.text_input("API 인증키 입력", type="password")
+sido_nm = st.sidebar.selectbox("시도 선택", ["강원도", "충남", "부산광역시", "제주특별자치도", "경상북도"])
+res_year = st.sidebar.text_input("조사년도", "2025")
 
-df = load_data()
+# 데이터 불러오기 함수
+def get_data(key, sido, year):
+    url = "https://apis.data.go.kr/1192000/service/OceansBeachSeawaterService1/getOceansBeachSeawaterInfo1"
+    params = {
+        'ServiceKey': key,
+        'pageNo': '1',
+        'numOfRows': '100',
+        'resultType': 'json',
+        'SIDO_NM': sido,
+        'RES_YEAR': year
+    }
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        items = data['response']['body']['items']['item']
+        return pd.DataFrame(items)
+    return pd.DataFrame()
 
-# 3. 사이드바: 해수욕장 선택
-st.sidebar.header("🐬 데이터 필터링")
-api_key = st.sidebar.text_input("공공데이터 API 인증키", type="password")
-
-selected_beaches = st.sidebar.multiselect(
-    "조회할 해수욕장을 선택하세요",
-    options=df['해수욕장명'].unique(),
-    default=df['해수욕장명'].unique()
-)
-
-# 선택된 데이터 필터링
-df_filtered = df[df['해수욕장명'].isin(selected_beaches)]
-
-# 4. 대시보드 출력
+# 메인 로직
 if api_key:
-    tab1, tab2 = st.tabs(["📊 통계 대시보드", "📍 지도 시각화"])
-    
-    with tab1:
-        st.subheader(f"선택된 해수욕장: {len(df_filtered)}개")
-        # 데이터가 실제 파일 기반으로 표시됨
-        st.dataframe(df_filtered[['해수욕장명', '위도', '경도']], use_container_width=True)
-
-    with tab2:
-        st.subheader("지도에서 보는 해수욕장 위치 🗺️")
-        # st.map 인식용 컬럼명 변경
-        map_data = df_filtered.rename(columns={'위도': 'lat', '경도': 'lon'})
-        st.map(map_data)
+    if st.sidebar.button("📊 데이터 분석 시작"):
+        with st.spinner('데이터를 불러오는 중...'):
+            df = get_data(api_key, sido_nm, res_year)
+            
+            if not df.empty:
+                # 지도 시각화용 데이터 전처리 (API 응답 필드명에 맞게 조정 필요)
+                # 예시: 'lat', 'lon' 필드가 있다면 그대로 사용
+                st.subheader(f"📍 {sido_nm} 해수욕장 지도 시각화")
+                st.map(df)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.subheader("수질 적합성 분포 🐟")
+                    fig = px.pie(df, names='적합여부', hole=0.3)
+                    st.plotly_chart(fig, use_container_width=True)
+                with col2:
+                    st.subheader("지역별 상세 데이터 🏖️")
+                    st.dataframe(df)
+            else:
+                st.error("데이터가 없습니다. 인증키나 파라미터를 확인하세요.")
 else:
-    st.info("사이드바에 API 인증키를 입력하면 대시보드가 활성화됩니다.")
+    st.info("사이드바에 API 인증키를 입력하고 조회 버튼을 누르세요.")
