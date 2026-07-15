@@ -33,7 +33,7 @@ if api_key:
         "numOfRows": "300", 
         "pageNo": "1", 
         "resultType": "json",
-        "RES_YEAR": "2026" # 필수 파라미터 추가
+        "RES_YEAR": "2025" # 필수 파라미터 추가
     }
     try:
         response = requests.get(url, params=params, timeout=10)
