@@ -1,43 +1,75 @@
 import streamlit as st
-import requests
 import pandas as pd
+import requests
+import plotly.express as px
 
-st.title("API 연동 테스트")
+# 1. 페이지 설정 (바다 테마)
+st.set_page_config(page_title="🌊 해양 환경 대시보드", layout="wide")
 
-# 1. 사용자로부터 API 키 입력받기
-api_key = st.text_input("공공데이터 API 인증키를 입력하세요:", type="password")
+# CSS 디자인
+st.markdown("""
+    <style>
+    .stApp { background-color: #eef6f7; }
+    h1 { color: #005b96; }
+    </style>
+""", unsafe_allow_html=True)
 
-if st.button("데이터 불러오기"):
-    if not api_key:
-        st.warning("인증키를 먼저 입력해 주세요.")
-    else:
-        # 2. API 요청 정보 설정
-        url = "https://apis.data.go.kr/1192000/service/OceansBeachSeawaterService1/getOceansBeachSeawaterInfo1"
-        params = {
-            "ServiceKey": api_key,
-            "resultType": "json",
-            "numOfRows": 10,  # 일단 10개만 테스트
-            "RES_YEAR": "2025"
-        }
-        
-        try:
-            # 3. API 요청
-            response = requests.get(url, params=params)
+st.title("🌊 전국 해수욕장 수질 적합성 대시보드 🏖️")
+
+# 2. 사이드바 설정
+st.sidebar.header("⚙️ 설정 및 인증")
+api_key = st.sidebar.text_input("공공데이터 API 인증키 입력", type="password")
+selected_year = st.sidebar.selectbox("조사연도 선택", ["2026", "2025", "2024"])
+
+if api_key:
+    url = "https://apis.data.go.kr/1192000/service/OceansBeachSeawaterService1/getOceansBeachSeawaterInfo1"
+    params = {
+        "ServiceKey": api_key,
+        "resultType": "json",
+        "numOfRows": 500,
+        "RES_YEAR": selected_year
+    }
+    
+    try:
+        response = requests.get(url, params=params)
+        if response.status_code == 200:
+            data = response.json()
             
-            if response.status_code == 200:
-                data = response.json()
+            if 'getOceansBeachSeawaterInfo' in data and 'item' in data['getOceansBeachSeawaterInfo']:
+                df = pd.DataFrame(data['getOceansBeachSeawaterInfo']['item'])
+                # 필드명 표준화 (대문자 변환)
+                df.columns = [col.upper() for col in df.columns]
                 
-                # 4. 데이터 확인
-                if 'getOceansBeachSeawaterInfo' in data:
-                    items = data['getOceansBeachSeawaterInfo']['item']
-                    df = pd.DataFrame(items)
-                    st.success("데이터 호출 성공!")
-                    st.write(df[['beachNm', 'adptYn']]) # 해수욕장명과 적합 여부만 출력
-                else:
-                    st.error("데이터가 없습니다. 응답 내용을 확인하세요.")
-                    st.json(data)
+                st.success(f"데이터 로드 성공! 총 {len(df)}개의 해수욕장 정보가 확인되었습니다.")
+
+                # 3. 레이아웃 구성
+                col1, col2 = st.columns([1, 1])
+                
+                with col1:
+                    st.subheader("📊 수질 적합 비율")
+                    fig_pie = px.pie(df, names='ADPT_YN', hole=0.4, 
+                                     color_discrete_sequence=['#0077b6', '#caf0f8'])
+                    st.plotly_chart(fig_pie, use_container_width=True)
+
+                with col2:
+                    st.subheader("📍 지역별 적합 현황")
+                    # 적합 여부로 그룹화
+                    chart_data = df.groupby(['SIDO_NM', 'ADPT_YN']).size().reset_index(name='COUNT')
+                    fig_bar = px.bar(chart_data, x='SIDO_NM', y='COUNT', color='ADPT_YN', barmode='group')
+                    st.plotly_chart(fig_bar, use_container_width=True)
+
+                # 지도 시각화 (위도/경도 데이터 활용)
+                if 'LAT' in df.columns and 'LON' in df.columns:
+                    st.subheader("🗺️ 해수욕장 위치 분포")
+                    df['LAT'] = pd.to_numeric(df['LAT'])
+                    df['LON'] = pd.to_numeric(df['LON'])
+                    st.map(df[['LAT', 'LON']])
+
             else:
-                st.error(f"API 호출 실패. 상태 코드: {response.status_code}")
-                
-        except Exception as e:
-            st.error(f"오류 발생: {e}")
+                st.warning("데이터가 없습니다. API 키나 연도를 확인하세요.")
+        else:
+            st.error(f"API 연결 실패 (코드: {response.status_code})")
+    except Exception as e:
+        st.error(f"처리 중 오류 발생: {e}")
+else:
+    st.info("👈 사이드바에서 API 인증키를 입력하면 대시보드가 활성화됩니다.")
