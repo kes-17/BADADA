@@ -25,32 +25,32 @@ st.markdown("### 🏖️ 가고 싶은 해수욕장의 수질을 확인해보세
 df = load_data()
 api_key = st.sidebar.text_input("공공데이터 API 키", type="password")
 
-# 2. API 호출 로직 (필수 파라미터 추가)
+# 2. 파라미터를 최소화하여 전체 데이터 호출
 if api_key:
     url = "https://apis.data.go.kr/1192000/service/OceansBeachSeawaterService1/getOceansBeachSeawaterInfo1"
     params = {
         "serviceKey": api_key,
         "numOfRows": "300",
         "pageNo": "1",
-        "resultType": "json",
-        "SIDO_NM": "인천", # 필수값 강제 입력
-        "RES_YEAR": "2025" # 필수값 강제 입력
+        "resultType": "json"
     }
     try:
         response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            if 'response' in data and 'body' in data['response'] and data['response']['body']['items'] != '':
+            # 데이터 구조를 확인하기 위해 사이드바에 로드된 컬럼 표시
+            if 'response' in data and 'body' in data['response']:
                 items = data['response']['body']['items']['item']
                 df_api = pd.DataFrame(items)
+                st.sidebar.write("로드된 컬럼:", df_api.columns.tolist()) # 구조 확인용
                 df = pd.merge(df, df_api, on='해수욕장명', how='left')
-                st.sidebar.success("데이터 로드 완료!")
+                st.sidebar.success("데이터 로드 성공!")
             else:
-                st.sidebar.error("데이터가 비어 있습니다. 파라미터 확인 필요.")
+                st.sidebar.error("데이터 구조를 찾을 수 없습니다.")
         else:
             st.sidebar.error(f"서버 응답 오류: {response.status_code}")
     except Exception as e:
-        st.sidebar.error(f"연결 실패: {str(e)}")
+        st.sidebar.error(f"오류: {str(e)}")
 
 # 3. 지도 및 선택 (수정 없음)
 selected_beach = st.selectbox("확인하고 싶은 해수욕장을 선택하세요:", df['해수욕장명'].unique())
@@ -66,11 +66,12 @@ with col2:
     st.write(f"**지자체**: {beach_data['지자체']}")
     st.write(f"**관리청**: {beach_data['관리청']}")
     
+    # 데이터 출력
     target_col = next((c for c in df.columns if '적합' in c or '수질' in c), None)
     if target_col and pd.notnull(beach_data[target_col]):
         st.markdown(f"### 수질 상태: {beach_data[target_col]}")
     else:
-        st.warning("API 키를 입력했으나 수질 정보를 가져오지 못했습니다.")
+        st.warning("데이터가 비어 있습니다. API 키를 다시 확인하세요.")
 
 if target_col and target_col in df.columns:
     st.divider()
