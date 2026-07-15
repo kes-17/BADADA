@@ -3,10 +3,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-# 페이지 설정
+# 1. 페이지 설정 (바다 테마)
 st.set_page_config(page_title="🌊 전국 해수욕장 수질 현황", layout="wide")
 
-# 스타일링
 st.markdown("""
     <style>
     .main { background-color: #f0f8ff; }
@@ -17,10 +16,10 @@ st.markdown("""
 st.title("🌊 전국 해수욕장 수질 적합성 대시보드 🏖️")
 st.sidebar.header("🐬 설정 및 데이터 조회")
 
-# API 인증키 입력
+# 2. API 인증키 입력
 api_key = st.sidebar.text_input("공공데이터 API 인증키를 입력하세요", type="password")
 
-# 가상 데이터 생성 (실제 API 연동 시 이 부분을 데이터 로드 로직으로 대체)
+# 3. 데이터 로드 로직 (가상 데이터)
 def get_mock_data():
     data = {
         "해수욕장명": ["해운대", "경포대", "대천", "함덕", "만리포"],
@@ -33,7 +32,6 @@ def get_mock_data():
 if api_key:
     df = get_mock_data()
     
-    # 탭 구성
     tab1, tab2 = st.tabs(["📊 통계 대시보드", "📍 지도 시각화"])
     
     with tab1:
@@ -47,6 +45,8 @@ if api_key:
 
     with tab2:
         st.subheader("지도에서 보는 수질 상태 🐬")
-        st.map(df)
+        # [수정된 부분] st.map이 인식할 수 있도록 컬럼명 변경
+        map_data = df.rename(columns={'위도': 'lat', '경도': 'lon'})
+        st.map(map_data)
 else:
     st.info("사이드바에 API 인증키를 입력하면 데이터가 로드됩니다.")
