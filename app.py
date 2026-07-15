@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 
-# 1. 페이지 설정 및 데이터 로드
+# 1. 페이지 설정
 st.set_page_config(page_title="해수욕장 정보 조회", layout="wide")
 
 @st.cache_data
@@ -13,49 +13,31 @@ def load_data():
 
 df = load_data()
 
-st.title("🏖️ 전국 해수욕장 정보 시스템")
-
-# 2. 사이드바 API 설정
-st.sidebar.header("API 설정")
+st.title("🌊 전국 해수욕장 수질 가이드")
 api_key = st.sidebar.text_input("공공데이터 API 인증키 입력", type="password")
 
-# 3. 해수욕장 선택
-selected_beach = st.selectbox("확인하고 싶은 해수욕장을 선택하세요:", df['해수욕장명'].unique())
-beach_data = df[df['해수욕장명'] == selected_beach].iloc[0]
-
-# 4. 화면 구성
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.subheader(f"📍 {selected_beach} 위치")
-    st.map(df[df['해수욕장명'] == selected_beach], latitude='위도', longitude='경도')
-
-with col2:
-    st.subheader("📋 해수욕장 상세 정보")
-    st.write(f"**지자체**: {beach_data['지자체']}")
-    st.write(f"**관리청**: {beach_data['관리청']}")
-    st.write(f"**길이**: {beach_data['길이(m)']} m")
-    st.write(f"**너비**: {beach_data['너비(m)']} m")
-    st.write(f"**백사장 면적**: {beach_data['백사장면적(m2)']} m²")
-
-# 5. API 연동 (간단한 예시 구조)
+# 2. 필수 파라미터를 추가한 API 호출
 if api_key:
-    st.divider()
-    st.subheader("🌊 수질 적합 여부 조회")
-    # API 요청 예시 (실제 연동 시 필요한 파라미터는 포털 가이드를 참고하세요)
     url = "https://apis.data.go.kr/1192000/service/OceansBeachSeawaterService1/getOceansBeachSeawaterInfo1"
+    # 필수 파라미터인 RES_YEAR를 반드시 포함해야 데이터가 나옵니다.
     params = {
         "ServiceKey": api_key,
         "resultType": "json",
-        "numOfRows": 1,
-        "pageNo": 1
+        "numOfRows": 300,
+        "pageNo": 1,
+        "RES_YEAR": "2026" 
     }
     try:
         response = requests.get(url, params=params)
-        if response.status_code == 200:
-            st.success("API 호출 성공! (상세 데이터 구조에 따라 추가 구현이 필요합니다.)")
-            st.json(response.json())
+        data = response.json()
+        
+        # 'item'이 비어있지 않은지 확인
+        if 'getOceansBeachSeawaterInfo' in data and data['getOceansBeachSeawaterInfo']['totalCount'] > 0:
+            items = data['getOceansBeachSeawaterInfo']['item']
+            df_api = pd.DataFrame(items)
+            st.success(f"데이터 로드 성공! 총 {len(df_api)}개의 데이터를 불러왔습니다.")
+            st.write(df_api.head()) # 데이터 확인
         else:
-            st.error("API 호출 실패")
+            st.warning("데이터가 없습니다. RES_YEAR 파라미터를 2025로 변경해 보거나 API 설정을 확인하세요.")
     except Exception as e:
         st.error(f"오류 발생: {e}")
