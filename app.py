@@ -1,63 +1,43 @@
 import streamlit as st
-import pandas as pd
 import requests
-import plotly.express as px
+import pandas as pd
 
-# 페이지 설정 (바다 테마)
-st.set_page_config(page_title="🌊 해양 환경 대시보드", layout="wide")
+st.title("API 연동 테스트")
 
-# CSS로 디자인 강화
-st.markdown("""
-    <style>
-    .stApp { background-color: #f0f8ff; }
-    h1 { color: #006994; }
-    </style>
-""", unsafe_allow_html=True)
+# 1. 사용자로부터 API 키 입력받기
+api_key = st.text_input("공공데이터 API 인증키를 입력하세요:", type="password")
 
-# 데이터 로드
-@st.cache_data
-def load_data():
-    df_loc = pd.read_csv("해수욕장_환경정보_공간.csv")
-    df_info = pd.read_csv("해수욕장_정보목록.csv")
-    return pd.merge(df_loc, df_info, on='해수욕장명', how='inner')
-
-df_base = load_data()
-
-st.title("🌊 전국 해수욕장 수질 적합성 대시보드 🏖️")
-st.sidebar.header("⚙️ 설정 및 인증")
-api_key = st.sidebar.text_input("공공데이터 API 인증키 입력", type="password")
-selected_year = st.sidebar.selectbox("조사연도 선택", ["2025", "2024"])
-
-if api_key:
-    url = "https://apis.data.go.kr/1192000/service/OceansBeachSeawaterService1/getOceansBeachSeawaterInfo1"
-    params = {"ServiceKey": api_key, "resultType": "json", "numOfRows": 500, "RES_YEAR": selected_year}
-    
-    try:
-        response = requests.get(url, params=params).json()
-        items = response['getOceansBeachSeawaterInfo']['item']
-        df_api = pd.DataFrame(items)
-        df_final = pd.merge(df_base, df_api, left_on='해수욕장명', right_on='beachNm')
-
-        # 레이아웃 구성
-        col1, col2 = st.columns([1, 1])
+if st.button("데이터 불러오기"):
+    if not api_key:
+        st.warning("인증키를 먼저 입력해 주세요.")
+    else:
+        # 2. API 요청 정보 설정
+        url = "https://apis.data.go.kr/1192000/service/OceansBeachSeawaterService1/getOceansBeachSeawaterInfo1"
+        params = {
+            "ServiceKey": api_key,
+            "resultType": "json",
+            "numOfRows": 10,  # 일단 10개만 테스트
+            "RES_YEAR": "2025"
+        }
         
-        with col1:
-            st.subheader("📍 해수욕장 수질 현황 지도")
-            fig_map = px.scatter_mapbox(df_final, lat="위도", lon="경도", color="adptYn", 
-                                        hover_name="해수욕장명", zoom=5, height=500)
-            fig_map.update_layout(mapbox_style="open-street-map")
-            st.plotly_chart(fig_map, use_container_width=True)
-
-        with col2:
-            st.subheader("📊 수질 통계")
-            pie = px.pie(df_final, names='adptYn', title="수질 적합 비율", hole=0.4, color_discrete_sequence=px.colors.sequential.Bluyl)
-            st.plotly_chart(pie, use_container_width=True)
-
-        bar = px.bar(df_final.groupby('지자체')['adptYn'].value_counts().unstack().fillna(0), 
-                     title="지역별 수질 적합 현황", barmode='group')
-        st.plotly_chart(bar, use_container_width=True)
-
-    except Exception as e:
-        st.error(f"데이터 로드 실패: {e}")
-else:
-    st.info("👈 사이드바에서 API 인증키를 입력하면 대시보드가 활성화됩니다.")
+        try:
+            # 3. API 요청
+            response = requests.get(url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # 4. 데이터 확인
+                if 'getOceansBeachSeawaterInfo' in data:
+                    items = data['getOceansBeachSeawaterInfo']['item']
+                    df = pd.DataFrame(items)
+                    st.success("데이터 호출 성공!")
+                    st.write(df[['beachNm', 'adptYn']]) # 해수욕장명과 적합 여부만 출력
+                else:
+                    st.error("데이터가 없습니다. 응답 내용을 확인하세요.")
+                    st.json(data)
+            else:
+                st.error(f"API 호출 실패. 상태 코드: {response.status_code}")
+                
+        except Exception as e:
+            st.error(f"오류 발생: {e}")
