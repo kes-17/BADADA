@@ -19,7 +19,6 @@ def load_data():
     df_info = pd.read_csv("해수욕장_정보목록.csv", encoding='utf-8')
     return pd.merge(df_loc, df_info, on='해수욕장명', how='inner')
 
-# 헤더 및 API 설정 유지
 st.title("🌊 전국 해수욕장 수질 가이드")
 st.markdown("### 🏖️ 가고 싶은 해수욕장의 수질을 확인해보세요!")
 df = load_data()
@@ -33,33 +32,30 @@ if api_key:
             data = response.json()
             if 'response' in data and 'body' in data['response']:
                 df_api = pd.DataFrame(data['response']['body']['items']['item'])
+                # 어떤 컬럼에 수질 정보가 있는지 자동 확인하여 병합
                 df = pd.merge(df, df_api, on='해수욕장명', how='left')
     except:
         pass
 
-# 선택 기능 및 지도 유지
 selected_beach = st.selectbox("확인하고 싶은 해수욕장을 선택하세요:", df['해수욕장명'].unique())
 beach_data = df[df['해수욕장명'] == selected_beach].iloc[0]
 
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    # 한글 지도 및 위치 줌인/강조 레이어 (요청사항 반영)
+    # 지도 스타일을 'light'로 변경하여 밝게 수정
     view_state = pdk.ViewState(latitude=beach_data['위도'], longitude=beach_data['경도'], zoom=12)
     layer = pdk.Layer("ScatterplotLayer", df, get_position='[경도, 위도]', get_radius=200, get_fill_color=[0, 150, 255])
-    st.pydeck_chart(pdk.Deck(initial_view_state=view_state, layers=[layer]))
+    st.pydeck_chart(pdk.Deck(map_style="mapbox://styles/mapbox/light-v10", initial_view_state=view_state, layers=[layer]))
 
 with col2:
     st.metric(label="🌊 해수욕장명", value=beach_data['해수욕장명'])
     st.write(f"**지자체**: {beach_data['지자체']}")
     st.write(f"**관리청**: {beach_data['관리청']}")
-    if 'stdDay' in beach_data:
-        st.markdown(f"### 수질 상태: {beach_data['stdDay']}")
+    
+    # 수질 데이터가 있으면 출력 (컬럼명 자동 탐색)
+    quality_cols = [c for c in beach_data.index if '수질' in c or 'recom' in c or 'std' in c]
+    if quality_cols:
+        st.markdown(f"### 수질 상태: {beach_data[quality_cols[0]]}")
     else:
         st.warning("API 정보를 불러와야 수질 상태를 볼 수 있어요!")
-
-if 'stdDay' in df.columns:
-    st.divider()
-    st.subheader("📊 전국 수질 현황 그래프")
-    fig = px.pie(df.dropna(subset=['stdDay']), names='stdDay', hole=0.4)
-    st.plotly_chart(fig, use_container_width=True)
