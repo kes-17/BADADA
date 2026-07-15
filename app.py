@@ -25,7 +25,7 @@ st.markdown("### 🏖️ 가고 싶은 해수욕장의 수질을 확인해보세
 df = load_data()
 api_key = st.sidebar.text_input("공공데이터 API 키", type="password")
 
-# 2. API 데이터 호출 수정 (포털 상세 정보에 맞춘 정확한 호출)
+# 2. API 호출 로직 (오류 상세 확인용)
 if api_key:
     url = "https://apis.data.go.kr/1192000/service/OceansBeachSeawaterService1/getOceansBeachSeawaterInfo1"
     params = {
@@ -38,14 +38,18 @@ if api_key:
         response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            # 데이터 구조 확인 (response -> body -> items -> item)
             if 'response' in data and 'body' in data['response'] and 'items' in data['response']['body']:
                 items = data['response']['body']['items']['item']
                 df_api = pd.DataFrame(items)
-                # 데이터 병합을 위해 컬럼명 확인 후 필요 시 이름 통일
+                # 데이터 병합을 위해 컬럼 이름 확인 (실제 API 응답 데이터에 맞춤)
                 df = pd.merge(df, df_api, on='해수욕장명', how='left')
-    except:
-        pass
+                st.sidebar.success("데이터 로드 완료!")
+            else:
+                st.sidebar.error("응답 데이터 구조가 비어있습니다.")
+        else:
+            st.sidebar.error(f"서버 응답 오류: {response.status_code}")
+    except Exception as e:
+        st.sidebar.error(f"연결 실패: {str(e)}")
 
 # 3. 지도 및 선택 (수정 없음)
 selected_beach = st.selectbox("확인하고 싶은 해수욕장을 선택하세요:", df['해수욕장명'].unique())
@@ -61,15 +65,16 @@ with col2:
     st.write(f"**지자체**: {beach_data['지자체']}")
     st.write(f"**관리청**: {beach_data['관리청']}")
     
-    # 수질 데이터 출력 (자동 탐색)
-    water_col = next((c for c in df.columns if '적합' in c or '수질' in c), None)
-    if water_col and pd.notnull(beach_data[water_col]):
-        st.markdown(f"### 수질 상태: {beach_data[water_col]}")
+    # 수질 데이터 표시
+    # API 데이터에서 '적합여부' 컬럼을 찾아 출력
+    target_col = next((c for c in df.columns if '적합' in c or '수질' in c), None)
+    if target_col and pd.notnull(beach_data[target_col]):
+        st.markdown(f"### 수질 상태: {beach_data[target_col]}")
     else:
-        st.warning("API 정보를 불러오는 중입니다.")
+        st.warning("API 키를 입력했으나 수질 정보를 가져오지 못했습니다.")
 
-if water_col and water_col in df.columns:
+if target_col and target_col in df.columns:
     st.divider()
     st.subheader("📊 전국 수질 현황")
-    fig = px.pie(df.dropna(subset=[water_col]), names=water_col, hole=0.4)
+    fig = px.pie(df.dropna(subset=[target_col]), names=target_col, hole=0.4)
     st.plotly_chart(fig, use_container_width=True)
