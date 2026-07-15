@@ -25,17 +25,25 @@ st.markdown("### 🏖️ 가고 싶은 해수욕장의 수질을 확인해보세
 df = load_data()
 api_key = st.sidebar.text_input("공공데이터 API 키", type="password")
 
-# 2. 데이터 구조 강제 분석 로직
+# 2. 데이터 구조에 맞춘 정확한 호출
 if api_key:
     url = "https://apis.data.go.kr/1192000/service/OceansBeachSeawaterService1/getOceansBeachSeawaterInfo1"
-    params = {"serviceKey": api_key, "numOfRows": "100", "pageNo": "1", "resultType": "json"}
+    # 파라미터를 최소화하여 데이터가 나오도록 유도
+    params = {"serviceKey": api_key, "numOfRows": "300", "pageNo": "1", "resultType": "json"}
     try:
         response = requests.get(url, params=params, timeout=10)
-        # 응답 전체 텍스트를 사이드바에 출력하여 구조 확인
-        st.sidebar.text("서버 응답 원문 일부:")
-        st.sidebar.write(response.text[:500]) 
+        data = response.json()
+        # 원문 구조에 맞게 수정: getOceansBeachSeawaterInfo -> item
+        if 'getOceansBeachSeawaterInfo' in data:
+            item_data = data['getOceansBeachSeawaterInfo']['item']
+            if item_data:
+                df_api = pd.DataFrame(item_data)
+                df = pd.merge(df, df_api, on='해수욕장명', how='left')
+                st.sidebar.success("데이터 로드 성공!")
+            else:
+                st.sidebar.warning("조회된 데이터가 없습니다.")
     except Exception as e:
-        st.sidebar.error(f"연결 오류: {e}")
+        st.sidebar.error(f"오류: {e}")
 
 # 3. 지도 및 선택 (수정 없음)
 selected_beach = st.selectbox("확인하고 싶은 해수욕장을 선택하세요:", df['해수욕장명'].unique())
@@ -50,4 +58,16 @@ with col2:
     st.metric(label="🌊 해수욕장명", value=beach_data['해수욕장명'])
     st.write(f"**지자체**: {beach_data['지자체']}")
     st.write(f"**관리청**: {beach_data['관리청']}")
-    st.warning("사이드바의 '서버 응답 원문'을 확인해 주세요.")
+    
+    # 수질 데이터 표시
+    target_col = next((c for c in df.columns if '적합' in c or '수질' in c), None)
+    if target_col and pd.notnull(beach_data[target_col]):
+        st.markdown(f"### 수질 상태: {beach_data[target_col]}")
+    else:
+        st.warning("선택한 해수욕장의 수질 정보를 찾을 수 없습니다.")
+
+if target_col and target_col in df.columns:
+    st.divider()
+    st.subheader("📊 전국 수질 현황")
+    fig = px.pie(df.dropna(subset=[target_col]), names=target_col, hole=0.4)
+    st.plotly_chart(fig, use_container_width=True)
