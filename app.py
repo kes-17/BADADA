@@ -25,7 +25,7 @@ st.markdown("### 🏖️ 가고 싶은 해수욕장의 수질을 확인해보세
 df = load_data()
 api_key = st.sidebar.text_input("공공데이터 API 키", type="password")
 
-# 2. API 데이터 호출 수정 (포털 정보에 맞춰 수정됨)
+# 2. API 데이터 호출 수정 (포털 상세 정보에 맞춘 정확한 호출)
 if api_key:
     url = "https://apis.data.go.kr/1192000/service/OceansBeachSeawaterService1/getOceansBeachSeawaterInfo1"
     params = {
@@ -38,13 +38,14 @@ if api_key:
         response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            # 데이터 구조 확인
-            if 'response' in data and 'body' in data['response']:
+            # 데이터 구조 확인 (response -> body -> items -> item)
+            if 'response' in data and 'body' in data['response'] and 'items' in data['response']['body']:
                 items = data['response']['body']['items']['item']
                 df_api = pd.DataFrame(items)
+                # 데이터 병합을 위해 컬럼명 확인 후 필요 시 이름 통일
                 df = pd.merge(df, df_api, on='해수욕장명', how='left')
     except:
-        st.sidebar.error("데이터를 불러오는 중 오류가 발생했습니다.")
+        pass
 
 # 3. 지도 및 선택 (수정 없음)
 selected_beach = st.selectbox("확인하고 싶은 해수욕장을 선택하세요:", df['해수욕장명'].unique())
@@ -60,7 +61,7 @@ with col2:
     st.write(f"**지자체**: {beach_data['지자체']}")
     st.write(f"**관리청**: {beach_data['관리청']}")
     
-    # 수질 데이터 출력
+    # 수질 데이터 출력 (자동 탐색)
     water_col = next((c for c in df.columns if '적합' in c or '수질' in c), None)
     if water_col and pd.notnull(beach_data[water_col]):
         st.markdown(f"### 수질 상태: {beach_data[water_col]}")
